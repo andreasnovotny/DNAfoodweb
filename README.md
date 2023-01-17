@@ -1,8 +1,8 @@
 # DNA Metabarcoding Highlights Cyanobacteria as the Main Source of Primary Production in a Pelagic Food Web Model: Supplementary Data Analysis
 
-[***Andreas Novotny, Baptiste Serandour, Susanne Kortsch, Benoit Gauzens, Kinlan Mehdi Goulwen Jan, and Monika Winder 2023***]{.underline}
+***Andreas Novotny, Baptiste Serandour, Susanne Kortsch, Benoit Gauzens, Kinlan Mehdi Goulwen Jan, and Monika Winder 2023***
 
-**Contact:** Andreas Novotny, [mail\@andreasnovotny.se](mailto:mail@andreasnovotny.se){.email}
+**Contact:** Andreas Novotny, [mail\@andreasnovotny.se](mailto:mail@andreasnovotny.se)
 
 ## Abstract
 

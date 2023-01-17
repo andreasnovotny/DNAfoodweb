@@ -3,6 +3,9 @@
 .Rapp.history
 
 # Output and Data files
+Data/*
+Outputs/*
+
 
 # Session Data files
 .RData
