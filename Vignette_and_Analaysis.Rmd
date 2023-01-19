@@ -76,6 +76,8 @@ We used a metabarcoding assay of the V3-V4 region of 16S rRNA gene of DNA extrac
 
 et al. 2016) and the sequences were assigned to the SILVA (Pruesse et al. 2007) and PhytoREF databases (Decelle et al. 2015).
 
+Load DNA dataset zooplankton-consumer and prey availability data:
+
 ```{r}
 zoopl_16S <- readRDS("./Data/16SrRNA_zp.rds") %>% 
   dplyr::mutate(StationDate = paste(STATION_ID, SAMPLE_date),
@@ -83,6 +85,21 @@ zoopl_16S <- readRDS("./Data/16SrRNA_zp.rds") %>%
                 NODE_NAME = ifelse(SORTED_genus == "S.baltica", "Synchaeta", SORTED_genus))
 
 head(zoopl_16S)
+```
+
+Create table of samples, to get an overview of the number of sample replicates per day, station, and zooplankton species.
+
+```{r}
+
+zoopl_16S %>%
+  filter(SORTED_genus != "Water") %>% 
+  group_by(Sample, SORTED_genus, SAMPLE_date, STATION_ID) %>% 
+  summarize() %>%
+  group_by(SORTED_genus, SAMPLE_date, STATION_ID) %>% 
+  summarize(n = length(Sample)) %>% 
+  write_csv("./Outputs/Tab.S3.csv")
+
+
 ```
 
 To assess the selectivity index S(i) for each prey taxon (i) of a consumer, we use the standardized forage ratio as described by (Chesson 1983). S(i) = Rg(i)/Re(i)/sum:k(Rg(k)/Re(k)) Rg(i) is the Read count of i (Abundance) in the consumers gut . Re(i) is the Read count of i in the environmental sample.
@@ -337,7 +354,7 @@ pivot_wider(Links, names_from = Prey, values_from = Preference, values_fill = 0)
   relocate(c("Predator",rev(ord.prey.fw))) %>% 
   arrange(match(Predator, ord.pred.fw)) %>%
   
-  write_csv("./Outputs/SI.csv")
+  write_csv("./Outputs/Tab.S2.csv")
 
 head(Links)
 ```
@@ -820,7 +837,7 @@ Save summary matrix:
 fw_mat %>% 
   as.data.frame() %>%
   rownames_to_column() %>% 
-  write_csv("./Outputs/Fluxes.csv")
+  write_csv("./Outputs/Tab.S1.csv")
 
 ```
 
