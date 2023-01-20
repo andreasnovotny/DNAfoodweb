@@ -407,28 +407,16 @@ rm(list = ls())
 
 # 2. Model Definition
 
-############################################################################## 
+## 2.1 Define FoodWebModel Function
 
-Read in pre filtered data sets that the model is based on.
-
-```{r}
-Links <- readRDS("./Data/Mod/Links.rds")
-Nodes <- readRDS("./Data/Mod/Nodes.rds")
-Biomasses <- readRDS("./Data/Mod/Biomasses.rds")
-Temperatures <- readRDS("./Data/Temperatures.rds")
-```
-
-## 2.1 Define functions for model parameters
-
-### modifyNodeData()
-
-The metabolic rate for each node was calculated based on metabolic scaling theory (4), where the metabolic rate Xi (J/s) is derived from species' body masses Mi and an allometric scaling constant, i.e., a normalization constant a =17.17 for invertebrates and a = 18.47 for vertebrates. Bei represents the total population biomass per area unit (g/m2) and is multiplied by the metabolic rate (flux per gram biomass) to obtain a metabolic rate estimate at the population level. Metabolic rates are also adjusted to ambient temperature, where E is the activation energy, K is Boltzmann's constant, and T is the absolute temperature in Kelvin.
+The metabolic rate for each node was calculated based on metabolic scaling theory (4), where the metabolic rate Xi (J/s) is derived from species' body masses Mi and an allometric scaling constant, i.e., a normalization constant a =17.17 for invertebrates and a = 18.47 for vertebrates. Bei represents the total population biomass per area unit (g/m2) and is multiplied by the metabolic rate (flux per gram biomass) to obtain a metabolic rate estimate at the population level. Metabolic rates are also adjusted to ambient temperature, where E is the activation energy, K is Boltzmann's constant, and T is the absolute temperature in Kelvin. We used a bioenergetic model described by29 to calculate energy fluxes (J/day/m2) between all nodes in the food web for each day of the year, and each of the three stations. The model builds on a steady-state assumption where the energy consumption of each species equals the energetic losses (Gi = Li). In this model, losses of each population (Li) were defined as the sum of metabolic losses for the population, and the energy flux lost to predation. Gains for each population were calculated as the sum of all fluxes from prey to predator multiplied with the assimilation efficiency, i.e., conversion of consumed biomass into energy and an absolute prey preference constant. The efficiency was based on the functional group of the prey and put to 0.7755. The prey preference was based on the selectivity index calculated from DNA abundances scaled with the relative biomass abundance of the prey species.
 
 ```{r}
-#' For a given date, construct the Node dataframe
 
-#' Calculates Losses, Efficiencies, and adds biomasses
-#' This is NOT a general function for export
+#' Estimating fluxes of energy
+
+#' For a given day and time, calculates fluxes in the food web, 
+#' This is a wrapper function for fluxweb::fluxing, not intended for export.
 
 #' @param nodes Nodes dataframe Should contain: BODYMASS, ORG_TYPE, and NODE_NAME
 #' @param links DataFrame with links: Predator, Prey, Preference
@@ -436,11 +424,58 @@ The metabolic rate for each node was calculated based on metabolic scaling theor
 #' @param temperatures Dataframe with temperature: DOY and Temperature
 #' @param doy Integer: What day of the year?
 #' @param station Character string: Name of the station
+
 #' @value data.frame
 
-modifyNodeData <- function(nodes=Nodes, links=Links, biomasses=Biomasses, temperatures=Temperatures, doy=280, station="BY31 LANDSORTSDJ") {
+FoodWebModel <- function(nodes=Nodes,
+                         links=Links,
+                         biomasses=Biomasses,
+                         temperatures=Temperatures,
+                         doy=280,
+                         station="BY31 LANDSORTSDJ") {
   
-  # Calculate LOSSES and define EFFICIENCIES based on metabolic type and temperature
+  
+  # 1. Construct two support functions:
+  
+  #' Support function: Construct Adjacency matrix from edgelist
+
+  #' @param links A dataframe with edges containing col1: Pred, Col2: Prey.
+  #' @param weight Column name that contains whe edge weight.
+  #' @value numeric.matrix
+  
+  edgelistToAdjacency <- function(links=Links, weight="Preference") {
+    
+    graph <- graph.data.frame(links)
+    mat <- get.adjacency(graph, attr=weight) %>% as.matrix()
+    
+    adjacency <- mat %>%
+      unlist() %>%
+      as.numeric() %>%
+      matrix(nrow=nrow(mat)) %>%
+      t()
+    return(adjacency)
+    
+    } # End of edgelistToAdjacency()
+  
+  
+  #' Support function: Convert matrix to long format dataframe
+  
+  #' @param mat a matrix
+  #' @value tibble. Col1: rownames(mat), col2: colnames(mat), col3: mat.
+  
+  matToDf <- function(mat) {
+    
+    DF <- list(Row = rownames(mat)[row(mat)] %||% row(mat),
+               Col = colnames(mat)[col(mat)] %||% col(mat),
+               value = mat) %>%
+      map_dfc(as.vector) %>% 
+      as_tibble()
+    return(DF)
+    
+    } # End of matToDf()
+  
+  
+  # 2. Calculate LOSSES and define EFFICIENCIES based on metabolic type and temperature
   temp <- temperatures %>% 
     dplyr::filter(DOY==doy) %>% 
     dplyr::pull(Temperature)
@@ -453,24 +488,25 @@ modifyNodeData <- function(nodes=Nodes, links=Links, biomasses=Biomasses, temper
                                  dplyr::recode(ORG_TYPE ,
                                                "Animal" = 17.17,
                                                "ectotherm vertebrates" = 18.47,
-                                               "Plant" = 1) -
-                                 tkonst),
+                                               "Plant" = 1) -tkonst),
 
-                  
                   EFFICIENCIES = dplyr::recode(ORG_TYPE,
                                                "Plant" = 0.77,
                                                "Detritus" = 0.4,
                                                "Animal" = 0.906,
                                                "Bacteria" = 0.906))
-#Notes: Detritus derived from:Gergs, R. and K. O. Rothhaupt (2008) in Freshwater Biology 53: 2494-250. However, in practice all resources in this model are "Plants", and all resources are "Animals", non ectothermal. All other numbers are not utilized. 
   
-  # Add BIOMASS to node data frame
+  # Note: Detritus derived from:Gergs, R. and K. O. Rothhaupt (2008) in Freshwater
+  # Biology 53: 2494-250.However, in practice all resources in this model are "Plants",
+  # and all resources are "Animals", non ectothermal. All other numbers are not utilized. 
+  
+  
+  # 3. Add BIOMASS to node data frame
   nodes_doy <- biomasses %>% 
     dplyr::filter(DOY==doy, Station==station) %>% 
     left_join(nodes_tmp, by="NODE_NAME")
-  
  
-  # Rearrange dataframe to overlap with LINKS data.
+  # 4. Rearrange dataframe to overlap with LINKS data.
   fluxnames <- links %>% 
     graph.data.frame() %>%
     get.adjacency(attr="Preference") %>%
@@ -479,161 +515,70 @@ modifyNodeData <- function(nodes=Nodes, links=Links, biomasses=Biomasses, temper
   
   nodes_doy <- nodes_doy[match(fluxnames, nodes_doy$NODE_NAME),] %>% 
     as.data.frame()
+  
   row.names(nodes_doy) <- nodes_doy$NODE_NAME
   
-  return(nodes_doy)
   
-}
-
-```
-
-### makeFluxing()
-
-We used a bioenergetic model described by29 to calculate energy fluxes (J/day/m2) between all nodes in the food web for each day of the year, and each of the three stations. The model builds on a steady-state assumption where the energy consumption of each species equals the energetic losses (Gi = Li). In this model, losses of each population (Li) were defined as the sum of metabolic losses for the population, and the energy flux lost to predation. Gains for each population were calculated as the sum of all fluxes from prey to predator multiplied with the assimilation efficiency, i.e., conversion of consumed biomass into energy and an absolute prey preference constant. The efficiency was based on the functional group of the prey and put to 0.7755. The prey preference was based on the selectivity index calculated from DNA abundances scaled with the relative biomass abundance of the prey species.
-
-![]()
-
-```{r}
-#' Constructs an Adjacencty matrix from pairwise weighted links dataset
-
-#' @param edgelist A dataframe with edges containing col1: Pred, Col2: Prey.
-#' @param weight Column name that contains whe edge weight.
-
-#' @value numeric.matrix
-
-edgelistToAdjacency <- function(links=Links, weight="Preference") {
+  # 5. Calculate energy fluxes usin the fluxweb packae
   
-  graph <- graph.data.frame(links)
-  mat <- get.adjacency(graph, attr=weight) %>% as.matrix()
-  
-  adjacency <- mat %>% 
-    unlist() %>% 
-    as.numeric() %>% 
-    matrix(nrow=nrow(mat))
-  return(adjacency)
-  adjacency
-}
-
-
-
-
-#' Calculate fluxes in food web
-
-#' Wrapper of fluxweb::fluxing
-#' Not a general function for export.
-
-#' @param nodes Data.frame, preferably output of modifyNodeData
-#' @param links Data.frame containing edges
-
-makeFluxing <- function(nodes=Nodes, links=Links) {
-  
-  require(tidyverse)
-  require(igraph)
-  require(fluxweb)
-  
-  # Define and save the col and row names as vector
-  fluxnames <- links %>% 
-    graph.data.frame() %>%
-    get.adjacency(attr="Preference") %>%
-    as.matrix() %>% 
-    colnames()
-  
-  # Calculate fluxes
   flux <- links %>% 
     edgelistToAdjacency() %>% # Make square numeric matrix.
-    t() %>% 
-    fluxing(biomasses = nodes$Abundance,
-            losses = nodes$LOSSES,
-            efficiencies = nodes$EFFICIENCIES,
+    fluxing(biomasses = nodes_doy$Abundance,
+            losses = nodes_doy$LOSSES,
+            efficiencies = nodes_doy$EFFICIENCIES,
             bioms.prefs = TRUE,
             ef.level = "prey",
-            bioms.losses = TRUE
-    )
+            bioms.losses = TRUE)
   
-  # Put names on matrix
+  # 6. Clean up the output, and return it to dataframe formate.
   colnames(flux) <- fluxnames
   row.names(flux) <- fluxnames
   
-  return(flux)
-}
-```
-
-### summarize fluxesPerYear()
-
-We calculated fluxes (J/day/m2) between all nodes in the food webs for each day of the year and each station.
-
-```{r}
-#' Converts matrix to long format dataframe
-
-#' @param mat a matrix
-#' @value tibble. Col1: rownames(mat), col2: colnames(mat), col3: mat.
-
-matToDf <- function(mat) {
-  
-  DF <- list(
-    Row = rownames(mat)[row(mat)] %||% row(mat),
-    Col = colnames(mat)[col(mat)] %||% col(mat),
-    value = mat
-  ) %>%
-    map_dfc(as.vector) %>% 
-    as_tibble()
-  return(DF)
-  
-}
-
-
-#' Calculates fluxes as data frame
-
-#' Wrapper of fluxweb::fluxing
-#' Not a general function for export
-
-#' @param nodes Nodes dataframe Should contain: BODYMASS, ORG_TYPE, and NODE_NAME
-#' @param links DataFrame with links: Predator, Prey, Preference
-#' @param biomasses Dataframe with biomass information: DOY, Abundance, NODE_NAME and Station
-#' @param temperatures Dataframe with temperature: DOY and Temperature
-#' @param doy Integer: What day of the year?
-#' @param station Character string: Name of the station
-
-#' @value data.frame
-
-
-fluxingDataFrame <- function(nodes = Nodes, links = Links, biomasses = Biomasses, temperatures = Temperatures,
-                             doy = 255, station = "BY31 LANDSORTSDJ") {
-  
-  data <- modifyNodeData(nodes = nodes, links = links, biomasses = biomasses, temperatures = temperatures,
-                             doy = doy, station = station) %>% 
-    makeFluxing(links = links) %>%
+  food_web <- flux %>%
     matToDf() %>%
-    mutate(DOY=doy, Station=station, Predator = Col, Prey = Row, Flux = value) %>% 
+    mutate(DOY=doy,
+           Station=station,
+           Predator = Col,
+           Prey = Row,
+           Flux = value) %>% 
     dplyr::select(Predator, Prey, Flux, DOY, Station)
   
-  return(data)
-}
-
-
-
-fluxPerDay <- function(Station) {
+  return(food_web)
   
-  mapply(fluxingDataFrame, doy=30:340,
-         MoreArgs = list(station = Station, nodes = Nodes, links = Links, biomasses = Biomasses, temperatures = Temperatures),
-         SIMPLIFY = FALSE) %>% 
-    bind_rows() %>% 
-    return()
-}
-
+} # End of FoodWebModel()
 
 ```
 
 ## 2.2 Computation and Calculations of metrics
 
+Read in pre filtered data sets that the model is based on.
+
+```{r}
+Links <- readRDS("./Data/Mod/Links.rds")
+Nodes <- readRDS("./Data/Mod/Nodes.rds")
+Biomasses <- readRDS("./Data/Mod/Biomasses.rds")
+Temperatures <- readRDS("./Data/Temperatures.rds")
+```
+
 ### Calculate fluxes for for all days and stations
+
+We calculated fluxes (J/day/m2) between all nodes in the food webs for each day of the year and each station. Here, the above defined FoodWebModel() function is applied to day 30:340, and appended to the three stations, one after the other.
 
 ```{r}
 
-full_model_df <- mapply(fluxPerDay, Station=c("BY31 LANDSORTSDJ",
-                                              "BY15 GOTLANDSDJ",
-                                              "BY5 BORNHOLMSDJ"),
-                        SIMPLIFY = FALSE) %>% 
+full_model_df <- mapply(function(Station) {bind_rows(mapply(FoodWebModel, doy=30:340,
+                                                  MoreArgs = list(station = Station,
+                                                                  nodes = Nodes,
+                                                                  links = Links,
+                                                                  biomasses = Biomasses,
+                                                                  temperatures = Temperatures),
+                                                  SIMPLIFY = FALSE))},
+                        
+                        Station=c("BY31 LANDSORTSDJ",
+                                  "BY15 GOTLANDSDJ",
+                                  "BY5 BORNHOLMSDJ"),
+                        SIMPLIFY = FALSE) %>%
+  
   bind_rows() %>% 
   mutate(Flux=Flux*86.4) #Modify unit from j/m2/s to Kj/m2/day
   
@@ -644,10 +589,11 @@ head(full_model_df)
 
 For each node and day of the year, we calculated the total predation losses, normalized predation pressure, and total consumption. We also calculated annual food web metrics by summarizing all daily flux networks (J/year/m2).
 
+Total
+
 ```{r message=FALSE}
-#predator info
 
-
+# Consumption per predator
 Pred_flux <- full_model_df %>%
   mutate(NODE_NAME = Predator) %>% 
   group_by(NODE_NAME, DOY, Station) %>% 
@@ -664,8 +610,8 @@ Summary_statistics_stations <- full_model_df %>%
   left_join(Biomasses) %>%
   left_join(Pred_flux) %>% 
   mutate(Predation_pressure=Predation_loss/Abundance) %>% 
-  gather(key = "Parameter", value = "Value", Abundance,
-         Predation_loss, Predation_pressure, Consumption)
+  gather(key = "Parameter", value = "Value",
+         Abundance, Predation_loss, Predation_pressure, Consumption)
 
 Summary_statistics_all <- Summary_statistics_stations %>% 
   group_by(NODE_NAME, DOY, Parameter) %>% 
