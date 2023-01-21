@@ -1,9 +1,9 @@
 ---
 title: "DNA Metabarcoding Highlights Cyanobacteria as the Main Source of Primary Production in a Pelagic Food Web Model - Supplementary information: Model analysis"
 output:
-  html_notebook: default
   html_document:
     df_print: paged
+  html_notebook: default
 ---
 
 [***Andreas Novotny, Baptiste Serandour, Susanne Kortsch, Benoit Gauzens, Kinlan Mehdi Goulwen Jan, and Monika Winder***]{.underline}
@@ -18,6 +18,8 @@ library(svglite)
 library(circlize)
 library(lubridate)
 library(forcats)
+library(fluxweb)
+library(car)
 ```
 
 ```{r, echo=FALSE}
@@ -60,11 +62,9 @@ color.prey.fw <- c("#3690c0", #Synechococales
 
 ############################################################################## 
 
-# 1. Data Preparations
+# 1 Data Preparations
 
 ############################################################################## 
-
-![](images/Si_example_method.png)
 
 **Figure: Overview of data preparation methods**
 
@@ -168,7 +168,7 @@ head(summarized_selectivity)
 ```
 
 ```{r}
-rm(environment, paired_data, selectivity_data, zoopl_16S)
+rm(environment, paired_data, zoopl_16S)
 ```
 
 ## 1.2 Biomasses
@@ -397,15 +397,11 @@ saveRDS(Nodes, "./Data/Mod/Nodes.rds")
 saveRDS(Biomasses, "./Data/Mod/Biomasses.rds")
 ```
 
-Clear the environment
 
-```{r}
-rm(list = ls())
-```
 
 ############################################################################## 
 
-# 2. Model Definition
+# 2 Model Definition
 
 ## 2.1 Define FoodWebModel Function
 
@@ -566,23 +562,45 @@ We calculated fluxes (J/day/m2) between all nodes in the food webs for each day 
 
 ```{r}
 
-full_model_df <- mapply(function(Station) {bind_rows(mapply(FoodWebModel, doy=30:340,
-                                                  MoreArgs = list(station = Station,
-                                                                  nodes = Nodes,
-                                                                  links = Links,
-                                                                  biomasses = Biomasses,
-                                                                  temperatures = Temperatures),
-                                                  SIMPLIFY = FALSE))},
-                        
-                        Station=c("BY31 LANDSORTSDJ",
-                                  "BY15 GOTLANDSDJ",
-                                  "BY5 BORNHOLMSDJ"),
-                        SIMPLIFY = FALSE) %>%
+full_model_df <- 
+  mapply(function(Station) {
+    bind_rows(mapply(FoodWebModel, doy=30:340,
+                     MoreArgs = list(station = Station,
+                                     nodes = Nodes,
+                                     links = Links,
+                                     biomasses = Biomasses,
+                                     temperatures = Temperatures),
+                     SIMPLIFY = FALSE))},
+    
+    Station=c("BY31 LANDSORTSDJ",
+              "BY15 GOTLANDSDJ",
+              "BY5 BORNHOLMSDJ"),
+    SIMPLIFY = FALSE) %>%
   
   bind_rows() %>% 
   mutate(Flux=Flux*86.4) #Modify unit from j/m2/s to Kj/m2/day
   
 head(full_model_df)
+
+```
+
+```{r}
+
+Station <- c("BY31 LANDSORTSDJ", "BY15 GOTLANDSDJ", "BY5 BORNHOLMSDJ")
+Doy <- 30:340
+g <- expand.grid(Station, Doy)
+
+full_model_df <-
+  mapply(FoodWebModel,
+         station = g[, 1],
+         doy = g[, 2],
+         MoreArgs = list(links=Links,
+                         biomasses=Biomasses,
+                         temperatures=Temperatures),
+         SIMPLIFY = FALSE) %>%
+  bind_rows() %>% 
+  mutate(Flux=Flux*86.4) #Modify unit from j/m2/s to Kj/m2/day
+
 ```
 
 ### Calculate metrics per day
@@ -962,7 +980,251 @@ fig.4 <- ggpubr::ggarrange(fig.4a, fig.4b, fig.4c, fig.4d)
 ggsave("./Outputs/fig.4.pdf",plot = fig.4, width = 8, height = 5)
 ```
 
-# 3. Session Info
+
+# 3 Model sensitivit to selectivity
+
+To estimate the importance of zooplankton feeding preferences on annual primary, we resampled the selectivity index data for all predators using the “slice_sample” function in R base package (n=30, resampling with replacement). We also created a null model, assuming no prey preference, and no feeding niche differentiation between the predators, by randomly subsampling the selectivity dataset (n=30). The annual contribution of each primary producer to food web productivity (predation losses) was recalculated with the resampled selectivity indices and was compared with the null model, using linear regression of the log-transformed data.
+
+## 3.1 Load data, summarize per order
+```{r}
+summarized_per_order <- selectivity_data %>% 
+  
+  group_by(NODE_NAME, Order, SAMPLE_date, Sample.x) %>% 
+  summarise(Selectivity_index = sum(Selectivity_index)) %>% 
+  
+  filter(Order %in% ord.prey.fw)
+
+```
+
+## 3.2 Subsample and bootstrap selectivity dataset 
+```{r}
+subsamplePreference <- 
+  function(Subsample) {
+    
+    names_predator <-
+      summarized_per_order %>% 
+      spread(Order, Selectivity_index) %>%
+      pull(NODE_NAME)
+    
+    names_prey <-
+      summarized_per_order %>% 
+      spread(NODE_NAME, Selectivity_index) %>%
+      pull(Order)
+  
+    subsample <- 
+      summarized_per_order %>% 
+      spread(Order, Selectivity_index) %>% 
+      group_by(NODE_NAME) %>%
+      slice_sample(prop = 1, replace = TRUE) %>% 
+      gather(key = Prey, value = Preference, Chaetocerotales:Thalassiosirales) %>%
+      group_by(NODE_NAME, Prey) %>%
+      summarise(Preference = mean(Preference)) %>% 
+      mutate(Method = "grouped")
+
+    random_predator <-
+      summarized_per_order %>%
+      spread(Order, Selectivity_index) %>%
+      ungroup() %>% 
+      slice_sample(prop = 1, replace = TRUE) %>% 
+      mutate(NODE_NAME = names_predator) %>% 
+      gather(key = Prey, value = Preference, Chaetocerotales:Thalassiosirales) %>%
+      group_by(NODE_NAME, Prey) %>%
+      summarise(Preference = mean(Preference)) %>% 
+      mutate(Method = "random_predator")
+    
+    random_prey <- 
+      summarized_per_order %>%
+      spread(NODE_NAME, Selectivity_index) %>%
+      ungroup() %>% 
+      slice_sample(prop = 1, replace = TRUE) %>% 
+      mutate(Order = names_prey) %>% 
+      gather(key = NODE_NAME, value = Preference, Acartia:Temora, na.rm = TRUE) %>% 
+      mutate(Prey = Order) %>% 
+      group_by(NODE_NAME, Prey) %>%
+      summarise(Preference = mean(Preference)) %>% 
+      mutate(Method = "random_prey") 
+
+    
+    bind_rows(subsample, random_prey) %>% 
+      mutate(Subsample = Subsample)
+  }
+
+```
+
+## 3.3 Create extended links dataframe, bootstrapped.
+```{r message=FALSE}
+Links_I <- mapply(subsamplePreference, Subsample = 1:30, SIMPLIFY = FALSE) %>% 
+  bind_rows() %>% 
+  mutate(Predator = NODE_NAME) %>% 
+  ungroup() %>% 
+  select(Predator, Prey, Preference, Subsample, Method)
+
+Links_I
+```
+
+## 3.4. Summarise and plot preference bootstrap data
+```{r}
+Preference_summary <- 
+  Links_I %>%
+  group_by(Predator, Prey, Method) %>%
+  dplyr::summarise(avg_Preference = mean(Preference),
+                   uCI_Preference = Rmisc::CI(Preference)[1],
+                   lCI_Preference = Rmisc::CI(Preference)[3])
+  
+Preference_plot <-
+  Preference_summary%>%
+  #filter(Method == "grouped") %>% 
+  mutate(Predator = factor(Predator, ord.pred.fw),
+         Prey = factor(Prey, ord.prey.fw)) %>% 
+  ggplot(aes(fill=Prey, y=avg_Preference, x=Predator)) +
+  geom_bar(stat = "identity", position = "dodge")+
+  geom_errorbar(aes(ymin=lCI_Preference, ymax=uCI_Preference),position = "dodge", size=0.25) +
+  facet_wrap(Method~.,
+             labeller = as_labeller(c(`grouped` = "Model",
+                                      `random_prey` = "Null-Model"))) +
+  scale_fill_prey +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_y_continuous(expression(paste('Prey Selectivity Index')))
+
+Preference_plot
+
+```
+
+
+
+
+## 3.5 Function: Estimate fluxes of energy
+
+
+```{r}
+
+# Wrapper for FoodWebModel function
+
+FoodWebModelI <- 
+  function(nodes=Nodes,
+           links=Links_I,
+           biomasses=Biomasses,
+           temperatures=Temperatures,
+           doy=152,
+           station="BY31 LANDSORTSDJ",
+           iteration=1,
+           method="grouped") {
+    
+  links_f <- links %>%
+    filter(Subsample==iteration,
+           Method==method)
+  
+  Model <- 
+    FoodWebModel(nodes = nodes,
+                 links = links_f,
+                 biomasses = biomasses,
+                 temperatures = temperatures,
+                 doy = doy,
+                 station = station) %>%
+    mutate(Method = method, 
+           Iteration = iteration) %>% 
+    filter(Predator %in% ord.pred.fw,
+         Prey %in% ord.prey.fw)
+  
+  return(Model)
+}
+  
+
+```
+
+
+Run the function for all stations, all days, stations, and iterations for the model and the null model.
+
+```{r, eval=FALSE}
+
+Method <- c("grouped", "random_prey")   
+Iteration <- 1:30
+Station <- c("BY31 LANDSORTSDJ", "BY15 GOTLANDSDJ", "BY5 BORNHOLMSDJ")
+Doy <- 30:340
+g <- expand.grid(Method, Iteration, Station, Doy)
+
+# Running this command may be slow, up to 1 h. Concider loading precalculated dataset.
+
+full_model_iteration <-
+  mapply(FoodWebModelI,
+         method = g[, 1],
+         iteration = g[, 2],
+         station = g[, 3],
+         doy = g[, 4],
+         MoreArgs = list(links=Links_I,
+                         biomasses=Biomasses,
+                         temperatures=Temperatures),
+         SIMPLIFY = FALSE) %>%
+  bind_rows()
+
+saveRDS(full_model_iteration, "./Outputs/full_model_iteration.rds")
+
+```
+
+```{r}
+full_model_iteration <- 
+  readRDS("./Outputs/full_model_iteration.rds")
+```
+
+## 3.6. Summarize and plot output
+
+```{r}
+summary_full <-
+  full_model_iteration %>% 
+  mutate(Flux=Flux*86.4) %>%  #Modify unit from j/m2/s to Kj/m2/day
+  group_by(Iteration, Method, Station, Prey) %>% 
+  summarise(Flux = sum(Flux)) %>% 
+  group_by(Iteration, Method, Prey) %>% 
+  summarise(Flux = mean(Flux)) %>% 
+  group_by(Prey, Method) %>% 
+  summarise(avg_Flux = mean(Flux),
+            uCI_Flux = Rmisc::CI(Flux)[1],
+            lCI_Flux = Rmisc::CI(Flux)[3]) 
+
+Flux_plot <-
+  summary_full %>% 
+  mutate(Prey = factor(Prey, ord.prey.fw)) %>% 
+  ggplot(aes(fill=Prey, y=avg_Flux, x=Prey)) +
+  geom_bar(stat = "identity", position = "dodge")+
+  geom_errorbar(aes(ymin=lCI_Flux, ymax=uCI_Flux),position = "dodge", size = 0.25) +
+  facet_wrap(Method~.,
+             labeller = as_labeller(c(`grouped` = "Model",
+                                      `random_prey` = "Null-Model"))) +
+  scale_fill_prey +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_y_continuous(expression(paste('Energy Flux (kJ / year /'~m^{2}~')')))
+
+Flux_plot
+```
+
+
+
+```{r}
+ggpubr::ggarrange(Preference_plot, Flux_plot, ncol = 1, common.legend = TRUE, legend = "right")
+ggsave("./Outputs/Fig.S2.pdf")
+```
+
+## 3.7 Hypothesis tesing - What is the effect of selectivity?
+
+```{r}
+summary_test <-
+  full_model_iteration %>% 
+  mutate(Flux=Flux*86.4) %>%  #Modify unit from j/m2/s to Kj/m2/day
+  group_by(Iteration, Method, Station, Prey) %>% 
+  summarise(Flux = sum(Flux)) %>% 
+  group_by(Iteration, Method, Prey) %>% 
+  summarise(Flux = mean(Flux)) 
+
+mod <- lm(log(Flux) ~ Prey*Method , data = summary_test)
+Anova(mod)
+plot(mod)
+
+```
+
+
+# 4 Session Info
 
 ```{r}
 sessionInfo()
