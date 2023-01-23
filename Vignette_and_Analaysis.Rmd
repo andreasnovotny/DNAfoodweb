@@ -560,29 +560,7 @@ Temperatures <- readRDS("./Data/Temperatures.rds")
 
 We calculated fluxes (J/day/m2) between all nodes in the food webs for each day of the year and each station. Here, the above defined FoodWebModel() function is applied to day 30:340, and appended to the three stations, one after the other.
 
-```{r}
 
-full_model_df <- 
-  mapply(function(Station) {
-    bind_rows(mapply(FoodWebModel, doy=30:340,
-                     MoreArgs = list(station = Station,
-                                     nodes = Nodes,
-                                     links = Links,
-                                     biomasses = Biomasses,
-                                     temperatures = Temperatures),
-                     SIMPLIFY = FALSE))},
-    
-    Station=c("BY31 LANDSORTSDJ",
-              "BY15 GOTLANDSDJ",
-              "BY5 BORNHOLMSDJ"),
-    SIMPLIFY = FALSE) %>%
-  
-  bind_rows() %>% 
-  mutate(Flux=Flux*86.4) #Modify unit from j/m2/s to Kj/m2/day
-  
-head(full_model_df)
-
-```
 
 ```{r}
 
