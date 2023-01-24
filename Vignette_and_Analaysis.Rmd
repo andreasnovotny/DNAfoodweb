@@ -3,7 +3,7 @@ title: "DNA Metabarcoding Highlights Cyanobacteria as the Main Source of Primary
 output:
   html_document:
     df_print: paged
-  html_notebook: default
+bibliography: references.bib
 ---
 
 [***Andreas Novotny, Baptiste Serandour, Susanne Kortsch, Benoit Gauzens, Kinlan Mehdi Goulwen Jan, and Monika Winder***]{.underline}
@@ -70,11 +70,9 @@ color.prey.fw <- c("#3690c0", #Synechococales
 
 ## 1.1 Selectivity index based on DNA metabarcoding
 
-Individuals of zooplankton were sampled at three locations in the Baltic Sea (Landsort Deep, Gotland Deep, and Bornholm Deep) over the season between 2017 and 2020 (Fig. E1, Tab. E3). Zooplankton samples were collected with vertical hauls from 0-30 and 30-60 m using a 90 µm-WP2 plankton net. For estimating available prey composition, water samples were collected with 10L Niskin bottles with 5 m depth intervals above the thermocline of 30 m depth or with a 20 m long hose. The depths were mixed by adding an equal volume of water from the Niskin bottles. 1-3L were sequentially filtered onto 25 mm diameter filters with 20 µm, 2 µm (polycarbonate), and 0.2 µm (nylon) pore sizes. Sampling for DNA analysis followed the protocol of the Swedish national monitoring program for microscopic count data.
+Individuals of zooplankton were sampled at three locations in the Baltic Sea (Landsort Deep, Gotland Deep, and Bornholm Deep) over the season between 2017 and 2020 (Fig. E1, Tab. E3). Zooplankton samples were collected with vertical hauls from 0-30 and 30-60 m using a 90 µm-WP2 plankton net. For estimating available prey composition, water samples were collected with 10L Niskin bottles with 5 m depth intervals above the thermocline of 30 m depth or with a 20 m long hose [@helcom2017]. The depths were mixed by adding an equal volume of water from the Niskin bottles. 1-3L were sequentially filtered onto 25 mm diameter filters with 20 µm, 2 µm (polycarbonate), and 0.2 µm (nylon) pore sizes. Sampling for DNA analysis followed the protocol of the Swedish national monitoring program for microscopic count data.
 
-We used a metabarcoding assay of the V3-V4 region of 16S rRNA gene of DNA extracted from the dominant zooplankton species, including Acartia spp., Centropages hamatus, Evadne nordmanni, Pseudocalanus spp., Temora longicornis, Synchaeta baltica, Bosmina spp., Keratella spp., and the water samples. Libraries were constructed using primers 341F-805R (Herlemann et al. 2011;
-
-et al. 2016) and the sequences were assigned to the SILVA (Pruesse et al. 2007) and PhytoREF databases (Decelle et al. 2015).
+We used a metabarcoding assay of the V3-V4 region of 16S rRNA gene of DNA extracted from the dominant zooplankton species, including Acartia spp., Centropages hamatus, Evadne nordmanni, Pseudocalanus spp., Temora longicornis, Synchaeta baltica, Bosmina spp., Keratella spp., and the water samples. Libraries were constructed using primers 341F-805R [@Herlemann2011] and the sequences were assigned to the SILVA [@balvociute2017]and PhytoREF databases [@decelle2015].
 
 Load DNA dataset zooplankton-consumer and prey availability data:
 
@@ -102,7 +100,7 @@ zoopl_16S %>%
 
 ```
 
-To assess the selectivity index S(i) for each prey taxon (i) of a consumer, we use the standardized forage ratio as described by (Chesson 1983). S(i) = Rg(i)/Re(i)/sum:k(Rg(k)/Re(k)) Rg(i) is the Read count of i (Abundance) in the consumers gut . Re(i) is the Read count of i in the environmental sample.
+To assess the selectivity index S(i) for each prey taxon (i) of a consumer, we use the standardized forage ratio as described by [@chesson1983]. S(i) = Rg(i)/Re(i)/sum:k(Rg(k)/Re(k)) Rg(i) is the Read count of i (Abundance) in the consumers gut . Re(i) is the Read count of i in the environmental sample.
 
 ### Create a paired data set, with each OTU in both the water and gut sample on one row.
 
@@ -173,7 +171,7 @@ rm(environment, paired_data, zoopl_16S)
 
 ## 1.2 Biomasses
 
-The population biomasses of zooplankton and phytoplankton were retrieved from the Swedish national pelagic phytoplankton and zooplankton monitoring with sampling intensity ranging between monthly and weekly samples(51). Individual body masses of phytoplankton and zooplankton were retrieved from COMBINE guidelines for plankton monitoring in the Baltic Sea(52). We calculated daily biomass estimates over one year by linearly interpolating data from samples taken between 2007 and 2018.
+The population biomasses of zooplankton and phytoplankton were retrieved from the Swedish national pelagic phytoplankton and zooplankton monitoring with sampling intensity ranging between monthly and weekly samples[@SMHI]. Individual body masses of phytoplankton and zooplankton were retrieved from COMBINE guidelines for plankton monitoring in the Baltic Sea[@helcom2017a]. We calculated daily biomass estimates over one year by linearly interpolating data from samples taken between 2007 and 2018.
 
 ```{r}
 Zooplankton <- readRDS("Data/Zooplankton_shark.rds")
@@ -397,15 +395,13 @@ saveRDS(Nodes, "./Data/Mod/Nodes.rds")
 saveRDS(Biomasses, "./Data/Mod/Biomasses.rds")
 ```
 
-
-
 ############################################################################## 
 
 # 2 Model Definition
 
 ## 2.1 Define FoodWebModel Function
 
-The metabolic rate for each node was calculated based on metabolic scaling theory (4), where the metabolic rate Xi (J/s) is derived from species' body masses Mi and an allometric scaling constant, i.e., a normalization constant a =17.17 for invertebrates and a = 18.47 for vertebrates. Bei represents the total population biomass per area unit (g/m2) and is multiplied by the metabolic rate (flux per gram biomass) to obtain a metabolic rate estimate at the population level. Metabolic rates are also adjusted to ambient temperature, where E is the activation energy, K is Boltzmann's constant, and T is the absolute temperature in Kelvin. We used a bioenergetic model described by29 to calculate energy fluxes (J/day/m2) between all nodes in the food web for each day of the year, and each of the three stations. The model builds on a steady-state assumption where the energy consumption of each species equals the energetic losses (Gi = Li). In this model, losses of each population (Li) were defined as the sum of metabolic losses for the population, and the energy flux lost to predation. Gains for each population were calculated as the sum of all fluxes from prey to predator multiplied with the assimilation efficiency, i.e., conversion of consumed biomass into energy and an absolute prey preference constant. The efficiency was based on the functional group of the prey and put to 0.7755. The prey preference was based on the selectivity index calculated from DNA abundances scaled with the relative biomass abundance of the prey species.
+The metabolic rate for each node was calculated based on metabolic scaling theory, where the metabolic rate Xi (J/s) is derived from species' body masses Mi and an allometric scaling constant, i.e., a normalization constant a =17.17 for invertebrates and a = 18.47 for vertebrates. Bei represents the total population biomass per area unit (g/m2) and is multiplied by the metabolic rate (flux per gram biomass) to obtain a metabolic rate estimate at the population level. Metabolic rates are also adjusted to ambient temperature, where E is the activation energy, K is Boltzmann's constant, and T is the absolute temperature in Kelvin. We used a bioenergetic model described by [@gauzens2019] to calculate energy fluxes (J/day/m2) between all nodes in the food web for each day of the year, and each of the three stations. The model builds on a steady-state assumption where the energy consumption of each species equals the energetic losses (Gi = Li). In this model, losses of each population (Li) were defined as the sum of metabolic losses for the population, and the energy flux lost to predation [@christensen1992]. Gains for each population were calculated as the sum of all fluxes from prey to predator multiplied with the assimilation efficiency, i.e., conversion of consumed biomass into energy and an absolute prey preference constant. The efficiency was based on the functional group of the prey and put to 0.7755. The prey preference was based on the selectivity index calculated from DNA abundances scaled with the relative biomass abundance of the prey species.
 
 ```{r}
 
@@ -559,8 +555,6 @@ Temperatures <- readRDS("./Data/Temperatures.rds")
 ### Calculate fluxes for for all days and stations
 
 We calculated fluxes (J/day/m2) between all nodes in the food webs for each day of the year and each station. Here, the above defined FoodWebModel() function is applied to day 30:340, and appended to the three stations, one after the other.
-
-
 
 ```{r}
 
@@ -958,12 +952,12 @@ fig.4 <- ggpubr::ggarrange(fig.4a, fig.4b, fig.4c, fig.4d)
 ggsave("./Outputs/fig.4.pdf",plot = fig.4, width = 8, height = 5)
 ```
 
-
 # 3 Model sensitivit to selectivity
 
-To estimate the importance of zooplankton feeding preferences on annual primary, we resampled the selectivity index data for all predators using the “slice_sample” function in R base package (n=30, resampling with replacement). We also created a null model, assuming no prey preference, and no feeding niche differentiation between the predators, by randomly subsampling the selectivity dataset (n=30). The annual contribution of each primary producer to food web productivity (predation losses) was recalculated with the resampled selectivity indices and was compared with the null model, using linear regression of the log-transformed data.
+To estimate the importance of zooplankton feeding preferences on annual primary, we resampled the selectivity index data for all predators using the "slice_sample" function in R base package (n=30, resampling with replacement). We also created a null model, assuming no prey preference, and no feeding niche differentiation between the predators, by randomly subsampling the selectivity dataset (n=30). The annual contribution of each primary producer to food web productivity (predation losses) was recalculated with the resampled selectivity indices and was compared with the null model, using linear regression of the log-transformed data.
 
 ## 3.1 Load data, summarize per order
+
 ```{r}
 summarized_per_order <- selectivity_data %>% 
   
@@ -974,7 +968,8 @@ summarized_per_order <- selectivity_data %>%
 
 ```
 
-## 3.2 Subsample and bootstrap selectivity dataset 
+## 3.2 Subsample and bootstrap selectivity dataset
+
 ```{r}
 subsamplePreference <- 
   function(Subsample) {
@@ -1030,6 +1025,7 @@ subsamplePreference <-
 ```
 
 ## 3.3 Create extended links dataframe, bootstrapped.
+
 ```{r message=FALSE}
 Links_I <- mapply(subsamplePreference, Subsample = 1:30, SIMPLIFY = FALSE) %>% 
   bind_rows() %>% 
@@ -1041,6 +1037,7 @@ Links_I
 ```
 
 ## 3.4. Summarise and plot preference bootstrap data
+
 ```{r}
 Preference_summary <- 
   Links_I %>%
@@ -1069,29 +1066,25 @@ Preference_plot
 
 ```
 
-
-
-
 ## 3.5 Function: Estimate fluxes of energy
-
 
 ```{r}
 
 # Wrapper for FoodWebModel function
 
 FoodWebModelI <- 
-  function(nodes=Nodes,
-           links=Links_I,
-           biomasses=Biomasses,
-           temperatures=Temperatures,
+  function(nodes = Nodes,
+           links = Links_I,
+           biomasses = Biomasses,
+           temperatures = Temperatures,
            doy=152,
            station="BY31 LANDSORTSDJ",
            iteration=1,
            method="grouped") {
     
   links_f <- links %>%
-    filter(Subsample==iteration,
-           Method==method)
+    filter(Subsample == iteration,
+           Method == method)
   
   Model <- 
     FoodWebModel(nodes = nodes,
@@ -1103,14 +1096,13 @@ FoodWebModelI <-
     mutate(Method = method, 
            Iteration = iteration) %>% 
     filter(Predator %in% ord.pred.fw,
-         Prey %in% ord.prey.fw)
+           Prey %in% ord.prey.fw)
   
   return(Model)
 }
   
 
 ```
-
 
 Run the function for all stations, all days, stations, and iterations for the model and the null model.
 
@@ -1158,7 +1150,7 @@ summary_full <-
   group_by(Prey, Method) %>% 
   summarise(avg_Flux = mean(Flux),
             uCI_Flux = Rmisc::CI(Flux)[1],
-            lCI_Flux = Rmisc::CI(Flux)[3]) 
+            lCI_Flux = Rmisc::CI(Flux)[3])
 
 Flux_plot <-
   summary_full %>% 
@@ -1176,8 +1168,6 @@ Flux_plot <-
 
 Flux_plot
 ```
-
-
 
 ```{r}
 ggpubr::ggarrange(Preference_plot, Flux_plot, ncol = 1, common.legend = TRUE, legend = "right")
@@ -1201,9 +1191,10 @@ plot(mod)
 
 ```
 
-
 # 4 Session Info
 
 ```{r}
 sessionInfo()
 ```
+
+# 5. References
