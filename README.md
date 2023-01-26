@@ -51,6 +51,10 @@ Zooplankton observations downloaded from <https://sharkweb.smhi.se/hamta-data/>.
 
 Temperature observations downloaded from <https://sharkweb.smhi.se/hamta-data/>. See the database for metadata description.
 
+### full_model_iteration.rds
+
+Contains the major model output, and can be recreated in the Vignette.
+
 ## Dependencies
 
 The model has been tested with the following dependencies:

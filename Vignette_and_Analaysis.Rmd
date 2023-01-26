@@ -952,11 +952,13 @@ fig.4 <- ggpubr::ggarrange(fig.4a, fig.4b, fig.4c, fig.4d)
 ggsave("./Outputs/fig.4.pdf",plot = fig.4, width = 8, height = 5)
 ```
 
-# 3 Model sensitivit to selectivity
+# 3 Model sensitivity to selectivity
 
 To estimate the importance of zooplankton feeding preferences on annual primary, we resampled the selectivity index data for all predators using the "slice_sample" function in R base package (n=30, resampling with replacement). We also created a null model, assuming no prey preference, and no feeding niche differentiation between the predators, by randomly subsampling the selectivity dataset (n=30). The annual contribution of each primary producer to food web productivity (predation losses) was recalculated with the resampled selectivity indices and was compared with the null model, using linear regression of the log-transformed data.
 
-## 3.1 Load data, summarize per order
+## 3.1 Bootstrap the selectivity dataset
+
+Summarize selectivity data set per order
 
 ```{r}
 summarized_per_order <- selectivity_data %>% 
@@ -968,67 +970,55 @@ summarized_per_order <- selectivity_data %>%
 
 ```
 
-## 3.2 Subsample and bootstrap selectivity dataset
+Crete function to re sample the selectivity data set with replacement.
 
 ```{r}
+# Subsample with replacement.
+
 subsamplePreference <- 
   function(Subsample) {
     
-    names_predator <-
-      summarized_per_order %>% 
-      spread(Order, Selectivity_index) %>%
-      pull(NODE_NAME)
-    
-    names_prey <-
-      summarized_per_order %>% 
-      spread(NODE_NAME, Selectivity_index) %>%
-      pull(Order)
-  
     subsample <- 
+      #Selectivity dataset as input
       summarized_per_order %>% 
+      
+      # Gather each zooplankton sample on the same row.
       spread(Order, Selectivity_index) %>% 
-      group_by(NODE_NAME) %>%
+      
+      #Group the dataset per predator orders (Node_names)
+      group_by(NODE_NAME) %>% 
+      
+      # Random sampling with replacement
       slice_sample(prop = 1, replace = TRUE) %>% 
+      
+      # Return back to long dataframe format
       gather(key = Prey, value = Preference, Chaetocerotales:Thalassiosirales) %>%
+      
+      # Get mean per predator prey interaction
       group_by(NODE_NAME, Prey) %>%
-      summarise(Preference = mean(Preference)) %>% 
+      summarise(Preference = mean(Preference)) %>%
+      
+      # Unused argument
       mutate(Method = "grouped")
-
-    random_predator <-
-      summarized_per_order %>%
-      spread(Order, Selectivity_index) %>%
-      ungroup() %>% 
-      slice_sample(prop = 1, replace = TRUE) %>% 
-      mutate(NODE_NAME = names_predator) %>% 
-      gather(key = Prey, value = Preference, Chaetocerotales:Thalassiosirales) %>%
-      group_by(NODE_NAME, Prey) %>%
-      summarise(Preference = mean(Preference)) %>% 
-      mutate(Method = "random_predator")
     
-    random_prey <- 
-      summarized_per_order %>%
-      spread(NODE_NAME, Selectivity_index) %>%
-      ungroup() %>% 
-      slice_sample(prop = 1, replace = TRUE) %>% 
-      mutate(Order = names_prey) %>% 
-      gather(key = NODE_NAME, value = Preference, Acartia:Temora, na.rm = TRUE) %>% 
-      mutate(Prey = Order) %>% 
-      group_by(NODE_NAME, Prey) %>%
-      summarise(Preference = mean(Preference)) %>% 
-      mutate(Method = "random_prey") 
-
-    
-    bind_rows(subsample, random_prey) %>% 
+    #New column that indicates the number of subsample
+    bind_rows(subsample) %>% 
       mutate(Subsample = Subsample)
   }
 
 ```
 
-## 3.3 Create extended links dataframe, bootstrapped.
+Create an extended bootstrapped dataset of selectivity indices, by resampling with replacement.
 
 ```{r message=FALSE}
-Links_I <- mapply(subsamplePreference, Subsample = 1:30, SIMPLIFY = FALSE) %>% 
+
+
+Links_I <-
+  # Apply the previously defined function, using 100 bootstrap replicates.
+  mapply(subsamplePreference, Subsample = 1:100, SIMPLIFY = FALSE) %>%
   bind_rows() %>% 
+  
+  # Make dataset imitate the Links dataset used in food web model.
   mutate(Predator = NODE_NAME) %>% 
   ungroup() %>% 
   select(Predator, Prey, Preference, Subsample, Method)
@@ -1036,37 +1026,9 @@ Links_I <- mapply(subsamplePreference, Subsample = 1:30, SIMPLIFY = FALSE) %>%
 Links_I
 ```
 
-## 3.4. Summarise and plot preference bootstrap data
+## 3.5 Estimate fluxes of energy based on bootstrapped data
 
-```{r}
-Preference_summary <- 
-  Links_I %>%
-  group_by(Predator, Prey, Method) %>%
-  dplyr::summarise(avg_Preference = mean(Preference),
-                   uCI_Preference = Rmisc::CI(Preference)[1],
-                   lCI_Preference = Rmisc::CI(Preference)[3])
-  
-Preference_plot <-
-  Preference_summary%>%
-  #filter(Method == "grouped") %>% 
-  mutate(Predator = factor(Predator, ord.pred.fw),
-         Prey = factor(Prey, ord.prey.fw)) %>% 
-  ggplot(aes(fill=Prey, y=avg_Preference, x=Predator)) +
-  geom_bar(stat = "identity", position = "dodge")+
-  geom_errorbar(aes(ymin=lCI_Preference, ymax=uCI_Preference),position = "dodge", size=0.25) +
-  facet_wrap(Method~.,
-             labeller = as_labeller(c(`grouped` = "Model",
-                                      `random_prey` = "Null-Model"))) +
-  scale_fill_prey +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 90)) +
-  scale_y_continuous(expression(paste('Prey Selectivity Index')))
-
-Preference_plot
-
-```
-
-## 3.5 Function: Estimate fluxes of energy
+Create wrapper function for the food web model that takes into acount the bootstrap replicate:
 
 ```{r}
 
@@ -1079,13 +1041,15 @@ FoodWebModelI <-
            temperatures = Temperatures,
            doy=152,
            station="BY31 LANDSORTSDJ",
-           iteration=1,
-           method="grouped") {
+           iteration=1, # <---- This Takes bootstrap replicate into account.
+           method="grouped") {         # "grouped" argument is unused
     
+  # Filter one bootstrap replicate from links dataset   
   links_f <- links %>%
     filter(Subsample == iteration,
            Method == method)
   
+  # Run foodweb model
   Model <- 
     FoodWebModel(nodes = nodes,
                  links = links_f,
@@ -1104,12 +1068,14 @@ FoodWebModelI <-
 
 ```
 
-Run the function for all stations, all days, stations, and iterations for the model and the null model.
+Run the function for all stations, all days, stations, and bootstrap replicates.
+
+*This is a time consuming process - Consider loading rerun data set*
 
 ```{r, eval=FALSE}
 
-Method <- c("grouped", "random_prey")   
-Iteration <- 1:30
+Method <- c("grouped") # unused
+Iteration <- 1:100
 Station <- c("BY31 LANDSORTSDJ", "BY15 GOTLANDSDJ", "BY5 BORNHOLMSDJ")
 Doy <- 30:340
 g <- expand.grid(Method, Iteration, Station, Doy)
@@ -1128,67 +1094,121 @@ full_model_iteration <-
          SIMPLIFY = FALSE) %>%
   bind_rows()
 
-saveRDS(full_model_iteration, "./Outputs/full_model_iteration.rds")
+saveRDS(full_model_iteration, "./full_model_iteration.rds")
 
 ```
+
+OPTIONAL: If previous chunk was not executed, read in this saved data set
 
 ```{r}
 full_model_iteration <- 
-  readRDS("./Outputs/full_model_iteration.rds")
+  readRDS("./full_model_iteration.rds")
 ```
 
-## 3.6. Summarize and plot output
+## 3.6. Alternative Null Hypothesis
+
+Create a null model where all predator prey preferences are 1.\
+Execute the model for all days and stations.
 
 ```{r}
-summary_full <-
-  full_model_iteration %>% 
-  mutate(Flux=Flux*86.4) %>%  #Modify unit from j/m2/s to Kj/m2/day
-  group_by(Iteration, Method, Station, Prey) %>% 
+Station <- c("BY31 LANDSORTSDJ", "BY15 GOTLANDSDJ", "BY5 BORNHOLMSDJ")
+Doy <- 30:340
+g <- expand.grid(Station, Doy)
+Links_0 <- Links %>% mutate(Preference = 1) #Set all preferences to 1
+
+full_model_null <-
+  mapply(FoodWebModel,
+         station = g[, 1],
+         doy = g[, 2],
+         MoreArgs = list(links=Links_0,
+                         biomasses=Biomasses,
+                         temperatures=Temperatures),
+         SIMPLIFY = FALSE) %>%
+  bind_rows() %>% 
+  mutate(Flux=Flux*86.4) #Modify unit from j/m2/s to Kj/m2/day
+```
+
+## 3.7 Plot bootstrapped distributions and null model outputs
+
+```{r}
+# Summarise Null model
+sum_null <-
+  full_model_null %>%
+  filter(Prey %in% ord.prey) %>% 
+  group_by(Station, Prey) %>% 
   summarise(Flux = sum(Flux)) %>% 
-  group_by(Iteration, Method, Prey) %>% 
+  group_by(Prey) %>% 
   summarise(Flux = mean(Flux)) %>% 
-  group_by(Prey, Method) %>% 
-  summarise(avg_Flux = mean(Flux),
-            uCI_Flux = Rmisc::CI(Flux)[1],
-            lCI_Flux = Rmisc::CI(Flux)[3])
+  mutate(Iteration="Null",
+         Prey = factor(Prey, ord.prey.fw))
 
-Flux_plot <-
-  summary_full %>% 
-  mutate(Prey = factor(Prey, ord.prey.fw)) %>% 
-  ggplot(aes(fill=Prey, y=avg_Flux, x=Prey)) +
-  geom_bar(stat = "identity", position = "dodge")+
-  geom_errorbar(aes(ymin=lCI_Flux, ymax=uCI_Flux),position = "dodge", size = 0.25) +
-  facet_wrap(Method~.,
-             labeller = as_labeller(c(`grouped` = "Model",
-                                      `random_prey` = "Null-Model"))) +
-  scale_fill_prey +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 90)) +
-  scale_y_continuous(expression(paste('Energy Flux (kJ / year /'~m^{2}~')')))
+# Summarise bootstrapped model
 
-Flux_plot
-```
-
-```{r}
-ggpubr::ggarrange(Preference_plot, Flux_plot, ncol = 1, common.legend = TRUE, legend = "right")
-ggsave("./Outputs/Fig.S2.pdf")
-```
-
-## 3.7 Hypothesis tesing - What is the effect of selectivity?
-
-```{r}
-summary_test <-
+density <-
   full_model_iteration %>% 
   mutate(Flux=Flux*86.4) %>%  #Modify unit from j/m2/s to Kj/m2/day
-  group_by(Iteration, Method, Station, Prey) %>% 
+  filter(Method== "grouped") %>% 
+  group_by(Iteration, Station, Prey) %>% 
   summarise(Flux = sum(Flux)) %>% 
-  group_by(Iteration, Method, Prey) %>% 
-  summarise(Flux = mean(Flux)) 
+  group_by(Iteration, Prey) %>% 
+  summarise(Flux = mean(Flux)) %>% 
+  mutate(Prey = factor(Prey, c("Synechococcales",
+                               "Nostocales",
+                               "Thalassiosirales",
+                               "Chaetocerotales",
+                               "Peridiniales",
+                               "Chlorellales",
+                               "Pyramimonadales",
+                               "Prymnesiales",
+                               "Pyrenomonadales","Chromulinales")),
+         Iteration = as.character(Iteration))
 
-mod <- lm(log(Flux) ~ Prey*Method , data = summary_test)
-Anova(mod)
-plot(mod)
+# Calculate 95% confidence intervals of bootstrapped replicates
+sum_mod <-
+  density %>% 
+  group_by(Prey) %>%
+  summarise(lCI_Flux = quantile(Flux, probs = 0.025),
+            uCI_Flux = quantile(Flux, probs = 0.975))
 
+
+
+density_plot <-
+  density %>% 
+ 
+  # Plot bootstraped distributions
+  ggplot(aes(Flux, fill=Prey,
+             color = Prey)) +
+  geom_density(alpha=0.5, color = 0) +
+  
+  # Add 95% Confidence interval
+  geom_vline(data=sum_mod,
+             aes(xintercept = lCI_Flux, color = Prey),
+             size = 0.3)+
+  geom_vline(data=sum_mod,
+             aes(xintercept = uCI_Flux, color = Prey),
+             size = 0.3)+
+  
+  # Add Null model output
+  geom_vline(data=sum_null,
+             aes(xintercept = Flux, color = Prey),
+             color = "Red", linetype = "dashed") +
+  
+  # Adjust Colors, axes an faceting.
+  scale_fill_prey +
+  scale_color_prey +
+  facet_wrap(~Prey, scales = "free_y", ncol = 2) +
+  scale_x_continuous(expression(paste('Energy Flux (kJ / year /'~m^{2}~')')),
+                     limits= c(0, 70))+
+  theme_bw() +
+  theme(legend.position = "none")
+
+density_plot
+```
+
+#### Fig. S2
+
+```{r}
+ggsave("./Outputs/Fig.S2.pdf",plot = density_plot, width = 5.5, height = 7)
 ```
 
 # 4 Session Info
