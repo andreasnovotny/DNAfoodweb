@@ -3,7 +3,7 @@
 .Rapp.history
 
 # Output and Data files
-Data/*
+Data/Mod/*
 Outputs/*
 
 

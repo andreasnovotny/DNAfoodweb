@@ -19,7 +19,6 @@ library(circlize)
 library(lubridate)
 library(forcats)
 library(fluxweb)
-library(car)
 ```
 
 ```{r, echo=FALSE}
@@ -1094,7 +1093,7 @@ full_model_iteration <-
          SIMPLIFY = FALSE) %>%
   bind_rows()
 
-saveRDS(full_model_iteration, "./full_model_iteration.rds")
+saveRDS(full_model_iteration, "./Data/full_model_iteration.rds")
 
 ```
 
@@ -1102,7 +1101,7 @@ OPTIONAL: If previous chunk was not executed, read in this saved data set
 
 ```{r}
 full_model_iteration <- 
-  readRDS("./full_model_iteration.rds")
+  readRDS("./Data/full_model_iteration.rds")
 ```
 
 ## 3.6. Alternative Null Hypothesis
@@ -1208,7 +1207,7 @@ density_plot
 #### Fig. S2
 
 ```{r}
-ggsave("./Outputs/Fig.S2.pdf",plot = density_plot, width = 5.5, height = 7)
+ggsave("./Outputs/Fig.S2.pdf",plot = density_plot, width = 6, height = 7)
 ```
 
 # 4 Session Info
