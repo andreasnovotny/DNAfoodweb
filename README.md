@@ -1,10 +1,12 @@
-# DNA Metabarcoding Highlights Cyanobacteria as the Main Source of Primary Production in a Pelagic Food Web Model: Supplementary Data Analysis
+# A novel framework for integrating molecular diet data and flux-based food web modelling
+
+Supplementary dataset to: *DNA metabarcoding highlights cyanobacteria as the main source of primary production in a pelagic food web model.*
 
 ***Andreas Novotny, Baptiste Serandour, Susanne Kortsch, Benoit Gauzens, Kinlan Mehdi Goulwen Jan, and Monika Winder 2023***
 
 **Contact:** Andreas Novotny, [mail\@andreasnovotny.se](mailto:mail@andreasnovotny.se)
 
-[![](https://zenodo.org/badge/DOI/10.5281/zenodo.7545864.svg)](https://doi.org/10.5281/zenodo.7545864)
+[![](https://zenodo.org/badge/DOI/10.5281/zenodo.7586799.svg)](https://doi.org/10.5281/zenodo.7586799)
 
 ## Abstract
 
