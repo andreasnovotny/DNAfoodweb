@@ -1,4 +1,4 @@
-# A novel framework for integrating molecular diet data and flux-based food web modelling
+# A flux-based model incorporating molecular diet data reveals the importance of feeding selectivity in shaping food web dynamics.
 
 Supplementary dataset to: *DNA metabarcoding highlights cyanobacteria as the main source of primary production in a pelagic food web model.*
 
